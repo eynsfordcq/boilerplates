@@ -1,0 +1,16 @@
+services:
+  navidrome:
+    image: deluan/navidrome:latest
+    user: 1000:1000 
+    ports:
+      - "15251:4533"
+    restart: unless-stopped
+    environment:
+      # Optional: put your config options customization here. Examples:
+      ND_SCANSCHEDULE: 1h
+      ND_LOGLEVEL: info  
+      ND_SESSIONTIMEOUT: 24h
+      ND_BASEURL: ""
+    volumes:
+      - "./data:/data"
+      - "/data1/Data/Songs:/music:ro"

@@ -1,0 +1,15 @@
+version: '3.9'
+services:
+    filebrowser:
+        image: filebrowser/filebrowser
+        ports:
+            - '15250:80'
+        user: 1000:1000
+        restart: always
+        volumes:
+            - './metadata/.filebrowser.json:/.filebrowser.json'
+            - './metadata/filebrowser.db:/database.db'
+            - '/data1/Data:/srv/HDD1'
+            - '/data2/Data:/srv/HDD2'
+            - '/data3/Data:/srv/HDD3'
+            - '/data4/Data:/srv/HDD4'
