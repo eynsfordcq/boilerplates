@@ -1,0 +1,65 @@
+services:
+  prometheus:
+    image: docker.io/prom/prometheus:v2.55.1
+    container_name: prometheus
+    ports:
+      - 9090:9090
+    command: "--config.file=/etc/prometheus/prometheus.yaml"
+    volumes:
+      - ./config/prometheus.yaml:/etc/prometheus/prometheus.yaml:ro
+      - prometheus-data:/prometheus
+    restart: unless-stopped
+  
+  grafana:
+    image: docker.io/grafana/grafana-oss:11.4.0
+    container_name: grafana
+    ports:
+      - "15253:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+    restart: unless-stopped
+    environment:
+      - GF_SERVER_ROOT_URL=https://grafana.eynsfordcd.my
+
+  node_exporter:
+    image: quay.io/prometheus/node-exporter:v1.8.2
+    container_name: node_exporter
+    command: "--path.rootfs=/host"
+    pid: host
+    restart: unless-stopped
+    volumes:
+      - /:/host:ro,rslave
+  
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.51.0
+    container_name: cadvisor
+    ports:
+      - 8080:8080
+    volumes:
+      - /:/rootfs:ro
+      - /run:/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    devices:
+      - /dev/kmsg
+    privileged: true
+    restart: unless-stopped
+
+  restic-exporter:
+    image: ngosang/restic-exporter
+    container_name: restic-exporter
+    environment:
+      - RESTIC_REPOSITORY=/data
+      - RESTIC_PASSWORD_FILE=/restic_password_file
+      - REFRESH_INTERVAL=500 
+    volumes:
+      - /data3/Data/immich-backup:/data
+      - /data3/Data/restic:/restic_password_file
+    restart: unless-stopped
+
+volumes:
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
