@@ -1,0 +1,14 @@
+[Unit]
+Description=OpenBSD Secure Shell server socket
+Before=sockets.target ssh.service
+ConditionPathExists=!/etc/ssh/sshd_not_to_be_run
+
+[Socket]
+ListenStream=
+ListenStream=59500
+Accept=no
+FreeBind=yes
+
+[Install]
+WantedBy=sockets.target
+RequiredBy=ssh.service
