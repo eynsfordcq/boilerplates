@@ -36,3 +36,12 @@ services:
     labels:
       com.centurylinklabs.watchtower.enable: "false"
 ```
+
+### Run Once
+
+```bash
+docker run --rm \
+    -v /var/run/docker.sock:/var/run/docker.sock \
+    containrrr/watchtower \
+    --run-once
+```
