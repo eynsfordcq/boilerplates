@@ -1,0 +1,17 @@
+services:
+  jupyter:
+    build: .
+    container_name: jupyter_server
+    ports:
+      - "8888:8888"  
+    volumes:
+      - ./notebooks:/home/jovyan/work  
+    environment:
+      JUPYTER_TOKEN: "<your_token_here (openssl rand -base64 32)>"
+    restart: unless-stopped
+    networks:
+      - jupyter-network
+
+networks:
+  jupyter-network:
+    driver: bridge
