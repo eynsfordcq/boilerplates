@@ -1,0 +1,24 @@
+version: '3.7'
+
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n
+    restart: always
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_HOST=${N8N_HOST_IP:-n8n.local} # This will be used in generated URLs. Set to your server's LAN IP.
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=https
+      - NODE_ENV=production
+      - WEBHOOK_URL=https://${N8N_HOST_IP:-n8n.local}:5678/ # Ensure this matches your access URL
+      - GENERIC_TIMEZONE=${GENERIC_TIMEZONE}
+      - N8N_SSL_KEY=/certs/n8n-selfsigned.key
+      - N8N_SSL_CERT=/certs/n8n-selfsigned.crt
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./local-files:/files
+      - ./certs:/certs:ro
+
+volumes:
+  n8n_data:
