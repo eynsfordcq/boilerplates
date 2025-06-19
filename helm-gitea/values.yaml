@@ -1,0 +1,39 @@
+namespace: "git"
+
+test:
+  enabled: false
+
+valkey-cluster:
+  enabled: false
+
+valkey:
+  enabled: false
+
+postgresql-ha:
+  enabled: false
+
+postgresql:
+  enabled: false
+
+service:
+  http:
+    type: NodePort
+    port: 3000
+    nodePort: 31000
+  ssh:
+    type: NodePort
+    port: 22
+    nodePort: 32222
+
+persistence:
+  create: false
+  claimName: <name_created_pvc_here>
+
+gitea:
+  admin:
+    username: <username>
+    password: <password>
+    email: <email>
+  config:
+    database:
+      DB_TYPE: sqlite3
