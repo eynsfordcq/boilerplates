@@ -1,0 +1,15 @@
+services:
+  mcpo:
+    image: ghcr.io/open-webui/mcpo:main
+    container_name: mcpo-server
+    restart: unless-stopped
+    command:
+      - "mcpo"
+      - "--config"
+      - "/app/config.json"
+      - "--api-key"
+      - "<random key: openssl rand -base64 18>"
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./config.json:/app/config.json:ro
