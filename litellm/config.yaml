@@ -1,0 +1,9 @@
+general_settings:
+  proxy_batch_write_at: 60
+  database_connection_pool_limit: 10
+  use_x_forwarded_for: true
+  store_prompts_in_spend_logs: true
+
+litellm_settings:
+  request_timeout: 600
+  set_verbose: False
