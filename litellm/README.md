@@ -19,7 +19,10 @@ Openrouter provider config
 }
 ```
 
-[Gemini thinking config](https://cloud.google.com/vertex-ai/generative-ai/docs/migrate/openai/examples#sample_curl_requests)
+## Gemini include thoughts summary
+
+- [Gemini thinking config](https://cloud.google.com/vertex-ai/generative-ai/docs/migrate/openai/examples#sample_curl_requests)
+- [LiteLLM config](https://docs.litellm.ai/docs/providers/vertex#thinking--reasoning_content)
 
 ```json
 {
@@ -31,5 +34,9 @@ Openrouter provider config
     }
   }
 }
+```
+
+```json
+{"thinking": {"type": "enabled"}}
 ```
 
