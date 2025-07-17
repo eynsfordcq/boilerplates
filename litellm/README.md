@@ -4,18 +4,18 @@
 
 Pass provider specific configuration in litellm_params with extra_body.
 
-Openrouter provider config
+[Openrouter provider config](https://openrouter.ai/docs/features/provider-routing)
 
 ```json
 {
   "extra_body": {
     "provider": {
       "order": [
-        "openai",
-        "together"
-      ]
+        "Chutes"
+      ],
+      "allow_fallbacks": false
     }
-  }
+  },
 }
 ```
 
