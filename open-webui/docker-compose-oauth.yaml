@@ -1,0 +1,25 @@
+version: '3.9'
+services:
+    open-webui:
+        image: 'ghcr.io/open-webui/open-webui:main'
+        restart: always
+        container_name: open-webui
+        volumes:
+            - './data:/app/backend/data'
+        environment:
+            - 'ENABLE_SIGNUP=false'
+            - 'ENABLE_OAUTH_SIGNUP=true'
+            - 'OAUTH_CLIENT_ID=<client_id>'
+            - 'OAUTH_CLIENT_SECRET=<client_secret>'
+            - 'OPENID_PROVIDER_URL=<provider>/.well-known/openid-configuration'
+            - 'OAUTH_PROVIDER_NAME=Gitlab SSO'
+            - 'OAUTH_SCOPES=openid email profile'
+            - 'OPENID_REDIRECT_URI=<open_webui_url>/oauth/oidc/callback'
+        ports:
+            - '15254:8080'
+        networks:
+            - owui
+
+networks:
+  owui:
+    driver: bridge
