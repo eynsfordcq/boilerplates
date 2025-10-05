@@ -1,0 +1,21 @@
+services:
+  mlflow_model_zeroshot:
+    restart: always
+    image: mlflow_server
+    container_name: mlflow_serve_zeroshot
+    ports:
+      - "20000:20000"
+    environment:
+      - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - MLFLOW_TRACKING_URI=http://web:5000
+    command: >
+      mlflow models serve
+      -m models:/sileod_deberta-v3-base-tasksource-nli/latest
+      -h 0.0.0.0
+      -p 20000
+      -w 4
+      --no-conda
+    networks:
+      - mlflow
