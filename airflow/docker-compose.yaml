@@ -1,0 +1,81 @@
+x-logging-default: &logging-default
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  postgresql:
+    image: docker.io/bitnami/postgresql:latest
+    environment:
+      - POSTGRESQL_DATABASE=${POSTGRES_DB}
+      - POSTGRESQL_USERNAME=${POSTGRES_USER}
+      - POSTGRESQL_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - postgresql_data:/bitnami/postgresql
+    logging: *logging-default
+
+  redis:
+    image: bitnami/redis:latest
+    environment:
+      - ALLOW_EMPTY_PASSWORD=yes
+    volumes:
+      - redis_data:/bitnami
+    logging: *logging-default
+
+  airflow-worker:
+    image: docker.io/bitnami/airflow:2.10.5
+    environment:
+      - AIRFLOW_COMPONENT_TYPE=worker
+      - AIRFLOW_FERNET_KEY=${AIRFLOW_FERNET_KEY}
+      - AIRFLOW_SECRET_KEY=${AIRFLOW_SECRET_KEY}
+      - AIRFLOW_EXECUTOR=CeleryExecutor
+      - AIRFLOW_DATABASE_NAME=${POSTGRES_DB}
+      - AIRFLOW_DATABASE_USERNAME=${POSTGRES_USER}
+      - AIRFLOW_DATABASE_PASSWORD=${POSTGRES_PASSWORD}
+      - AIRFLOW_LOAD_EXAMPLES=no
+    volumes:
+      - ./dags:/opt/bitnami/airflow/dags
+      - ./requirements.txt:/bitnami/python/requirements.txt
+    logging: *logging-default
+
+  airflow-scheduler:
+    image: docker.io/bitnami/airflow:2.10.5
+    environment:
+      - AIRFLOW_COMPONENT_TYPE=scheduler
+      - AIRFLOW_FERNET_KEY=${AIRFLOW_FERNET_KEY}
+      - AIRFLOW_SECRET_KEY=${AIRFLOW_SECRET_KEY}
+      - AIRFLOW_EXECUTOR=CeleryExecutor
+      - AIRFLOW_DATABASE_NAME=${POSTGRES_DB}
+      - AIRFLOW_DATABASE_USERNAME=${POSTGRES_USER}
+      - AIRFLOW_DATABASE_PASSWORD=${POSTGRES_PASSWORD}
+      - AIRFLOW_LOAD_EXAMPLES=no
+    volumes:
+      - ./dags:/opt/bitnami/airflow/dags
+      - ./requirements.txt:/bitnami/python/requirements.txt
+    logging: *logging-default
+
+  airflow:
+    image: docker.io/bitnami/airflow:2.10.5
+    environment:
+      - AIRFLOW_FERNET_KEY=${AIRFLOW_FERNET_KEY}
+      - AIRFLOW_SECRET_KEY=${AIRFLOW_SECRET_KEY}
+      - AIRFLOW_EXECUTOR=CeleryExecutor
+      - AIRFLOW_DATABASE_NAME=${POSTGRES_DB}
+      - AIRFLOW_DATABASE_USERNAME=${POSTGRES_USER}
+      - AIRFLOW_DATABASE_PASSWORD=${POSTGRES_PASSWORD}
+      - AIRFLOW_PASSWORD=${AIRFLOW_WEBSERVER_PASSWORD}
+      - AIRFLOW_USERNAME=${AIRFLOW_WEBSERVER_USER}
+      - AIRFLOW_EMAIL=${AIRFLOW_WEBSERVER_EMAIL}
+      - AIRFLOW_WEBSERVER_BASE_URL=${AIRFLOW_WEBSERVER_BASE_URL}
+      - AIRFLOW__API__AUTH_BACKENDS=airflow.api.auth.backend.basic_auth
+    ports:
+      - 8080:8080
+    volumes:
+      - ./dags:/opt/bitnami/airflow/dags
+      - ./requirements.txt:/bitnami/python/requirements.txt
+    logging: *logging-default
+
+volumes:
+  postgresql_data:
+  redis_data:
