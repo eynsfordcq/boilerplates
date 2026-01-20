@@ -1,0 +1,36 @@
+x-logging-default: &logging-default
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  rustfs:
+    image: rustfs/rustfs:latest
+    container_name: rustfs_local
+    restart: unless-stopped
+    ports:
+      - "9000:9000" 
+      - "9001:9001" 
+    environment:
+      RUSTFS_CONSOLE_ENABLE: "true"
+      RUSTFS_ACCESS_KEY: "rustfsadmin"
+      RUSTFS_SECRET_KEY: "rustfsadmin"
+    volumes:
+      - rustfs_data:/data
+    command: /data
+    logging: *logging-default
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "sh", "-c",
+          "curl -f http://127.0.0.1:9000/health && curl -f http://127.0.0.1:9001/rustfs/console/health"
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  rustfs_data:
