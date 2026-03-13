@@ -20,6 +20,10 @@ class Filter:
             default=2,
             description="Number of seconds to wait between polling attempts.",
         )
+        initial_delay: int = Field(
+            default=5,
+            description="Number of seconds to wait before request attempts.",
+        )
 
     def __init__(self):
         self.valves = self.Valves()
@@ -70,9 +74,12 @@ class Filter:
 
         await self._emit_status(
             __event_emitter__,
-            f"Calling LiteLLM usage endpoint with Request ID: {self._request_id}",
+            f"Waiting for {self.valves.initial_delay}s before calling "
+            f"LiteLLM usage endpoint with Request ID: {self._request_id}",
             done=False,
         )
+
+        await asyncio.sleep(self.valves.initial_delay)
 
         log_record = await self._poll_usage_data(
             self._request_id,
@@ -165,18 +172,12 @@ class Filter:
         return None
 
     def _format_usage_message(self, log: dict) -> str:
-        meta = log.get("metadata", {})
-        breakdown = meta.get("cost_breakdown", {})
-
         prompt_tokens = log.get("prompt_tokens", 0)
         completion_tokens = log.get("completion_tokens", 0)
         total_tokens = log.get("total_tokens", 0)
-
-        in_cost = breakdown.get("input_cost") or 0.0
-        out_cost = breakdown.get("output_cost") or 0.0
         total_cost = log.get("spend") or 0.0
 
         return (
-            f"🎰 Tokens: {prompt_tokens} in · {completion_tokens} out · {total_tokens} total | "
-            f"💸 Cost: ${in_cost:.6f} in · ${out_cost:.6f} out · ${total_cost:.6f} total"
+            f"💸 Cost: ${total_cost:.5f} | "
+            f"🎰 Tokens: ⬆️ {prompt_tokens:,} · ⬇️ {completion_tokens:,} · 🙈 {total_tokens:,} "
         )
