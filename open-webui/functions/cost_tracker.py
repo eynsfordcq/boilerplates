@@ -72,37 +72,50 @@ class Filter:
             )
             return body
 
-        await self._emit_status(
-            __event_emitter__,
-            f"Waiting for {self.valves.initial_delay}s before calling "
-            f"LiteLLM usage endpoint with Request ID: {self._request_id}",
-            done=False,
-        )
-
-        await asyncio.sleep(self.valves.initial_delay)
-
-        log_record = await self._poll_usage_data(
-            self._request_id,
-            self._url,
-            self._key,
-            __event_emitter__,
-        )
-
-        if log_record:
-            cost_message = self._format_usage_message(log_record)
-            await self._emit_status(
-                __event_emitter__,
-                cost_message,
-                done=True,
+        # schedule background task
+        asyncio.create_task(
+            self._background_usage_task(
+                self._request_id, self._url, self._key, __event_emitter__
             )
-        else:
-            await self._emit_status(
-                __event_emitter__,
-                "Failed to retrieve usage data after retries.",
-                done=True,
-            )
+        )
 
         return body
+
+    async def _background_usage_task(
+        self,
+        request_id: str,
+        url: str,
+        key: str,
+        emitter: Optional[Callable],
+    ):
+        try:
+            await self._emit_status(
+                emitter,
+                f"Waiting for {self.valves.initial_delay}s before calling "
+                f"LiteLLM usage endpoint with Request ID: {self._request_id}",
+                done=False,
+            )
+
+            await asyncio.sleep(self.valves.initial_delay)
+
+            log_record = await self._poll_usage_data(
+                request_id,
+                url,
+                key,
+                emitter,
+            )
+
+            if log_record:
+                cost_message = self._format_usage_message(log_record)
+                await self._emit_status(emitter, cost_message, done=True)
+            else:
+                await self._emit_status(
+                    emitter,
+                    "Failed to retrieve usage data after retries.",
+                    done=True,
+                )
+        except Exception as e:
+            logger.error(f"Error in background usage task: {e}")
 
     async def _emit_status(
         self,
