@@ -22,14 +22,14 @@ class Filter:
         )
         initial_delay: int = Field(
             default=5,
-            description="Number of seconds to wait before request attempts.",
+            description="Number of seconds to wait before polling attempts.",
         )
 
     def __init__(self):
         self.valves = self.Valves()
         self._url: Optional[str] = None
         self._key: Optional[str] = None
-        self._request_id: Optional[str] = None
+        self._request_ids: set[str] = set()
 
     def inlet(
         self,
@@ -42,18 +42,18 @@ class Filter:
             config = __request__.app.state.config
             self._url = config.OPENAI_API_BASE_URLS[idx].rstrip("/")
             self._key = config.OPENAI_API_KEYS[idx]
-            self._request_id = None
+            self._request_ids = set()
         except Exception as e:
             logger.error(f"Inlet setup error: {e}")
-
         return body
 
     async def stream(self, event: dict, __event_emitter__: Callable = None) -> dict:
-        if not self._request_id and event.get("id"):
-            self._request_id = event["id"]
+        rid = event.get("id")
+        if rid and rid not in self._request_ids:
+            self._request_ids.add(rid)
             await self._emit_status(
                 __event_emitter__,
-                f"Captured Request ID: {self._request_id}",
+                f"Captured request ID: {rid} (total: {len(self._request_ids)})",
                 done=False,
             )
         return event
@@ -64,26 +64,29 @@ class Filter:
         __request__: Request = None,
         __event_emitter__: Callable = None,
     ) -> dict:
-        if not self._request_id or not self._url:
+        if not self._request_ids or not self._url:
             await self._emit_status(
                 __event_emitter__,
-                "Usage data unavailable (Missing URL or Request ID).",
+                "Usage data unavailable (missing URL or request IDs).",
                 done=True,
             )
             return body
 
-        # schedule background task
         asyncio.create_task(
             self._background_usage_task(
-                self._request_id, self._url, self._key, __event_emitter__
+                set(
+                    self._request_ids
+                ),  # snapshot — avoid mutation after outlet returns
+                self._url,
+                self._key,
+                __event_emitter__,
             )
         )
-
         return body
 
     async def _background_usage_task(
         self,
-        request_id: str,
+        request_ids: set[str],
         url: str,
         key: str,
         emitter: Optional[Callable],
@@ -91,23 +94,35 @@ class Filter:
         try:
             await self._emit_status(
                 emitter,
-                f"Waiting for {self.valves.initial_delay}s before calling "
-                f"LiteLLM usage endpoint with Request ID: {self._request_id}",
+                f"Waiting {self.valves.initial_delay}s before polling "
+                f"{len(request_ids)} request(s)...",
                 done=False,
             )
-
             await asyncio.sleep(self.valves.initial_delay)
 
-            log_record = await self._poll_usage_data(
-                request_id,
-                url,
-                key,
-                emitter,
-            )
+            # Share one session across all concurrent polls.
+            async with aiohttp.ClientSession() as session:
+                results = await asyncio.gather(
+                    *(
+                        self._poll_single_request(
+                            rid, url, key, session, emitter, idx, len(request_ids)
+                        )
+                        for idx, rid in enumerate(request_ids, 1)
+                    ),
+                    return_exceptions=True,
+                )
 
-            if log_record:
-                cost_message = self._format_usage_message(log_record)
-                await self._emit_status(emitter, cost_message, done=True)
+            records = [r for r in results if isinstance(r, dict)]
+
+            if records:
+                aggregated = self._aggregate_records(records)
+                await self._emit_status(
+                    emitter,
+                    self._format_usage_message(
+                        aggregated, len(records), len(request_ids)
+                    ),
+                    done=True,
+                )
             else:
                 await self._emit_status(
                     emitter,
@@ -117,6 +132,62 @@ class Filter:
         except Exception as e:
             logger.error(f"Error in background usage task: {e}")
 
+    async def _poll_single_request(
+        self,
+        request_id: str,
+        url: str,
+        key: str,
+        session: aiohttp.ClientSession,
+        emitter: Optional[Callable],
+        index: int,
+        total: int,
+    ) -> Optional[dict]:
+        """Poll LiteLLM for a single request ID with retries."""
+        now = datetime.now(timezone.utc)
+        start_date = (now - timedelta(days=1)).strftime("%Y-%m-%d")
+        end_date = (now + timedelta(days=1)).strftime("%Y-%m-%d")
+        endpoint = (
+            f"{url}/spend/logs/v2"
+            f"?request_id={request_id}"
+            f"&start_date={start_date}"
+            f"&end_date={end_date}"
+            f"&page=1&page_size=1"
+        )
+        headers = {
+            "accept": "application/json",
+            "x-litellm-api-key": key,
+        }
+        label = f"[{index}/{total}] {request_id[:8]}…"
+
+        for attempt in range(self.valves.max_retries):
+            await self._emit_status(
+                emitter,
+                f"Polling {label} (attempt {attempt + 1}/{self.valves.max_retries})",
+                done=False,
+            )
+            try:
+                async with session.get(endpoint, headers=headers) as r:
+                    if r.status == 200:
+                        data = await r.json()
+                        records = data.get("data", [])
+                        if records:
+                            return records[0]
+            except Exception as e:
+                logger.debug(f"Polling exception for {request_id}: {e}")
+
+            if attempt < self.valves.max_retries - 1:
+                await asyncio.sleep(self.valves.retry_interval)
+
+        return None
+
+    def _aggregate_records(self, records: list[dict]) -> dict:
+        return {
+            "prompt_tokens": sum(r.get("prompt_tokens", 0) for r in records),
+            "completion_tokens": sum(r.get("completion_tokens", 0) for r in records),
+            "total_tokens": sum(r.get("total_tokens", 0) for r in records),
+            "spend": sum(r.get("spend") or 0.0 for r in records),
+        }
+
     async def _emit_status(
         self,
         emitter: Optional[Callable],
@@ -125,7 +196,6 @@ class Filter:
     ):
         if not emitter:
             return
-
         await emitter(
             {
                 "type": "status",
@@ -137,60 +207,21 @@ class Filter:
             }
         )
 
-    async def _poll_usage_data(
-        self,
-        request_id: str,
-        url: str,
-        key: str,
-        emitter: Optional[Callable],
-    ) -> Optional[dict]:
-        now = datetime.now(timezone.utc)
-        start_date = (now - timedelta(days=1)).strftime("%Y-%m-%d")
-        end_date = (now + timedelta(days=1)).strftime("%Y-%m-%d")
-
-        endpoint = (
-            f"{url}/spend/logs/v2"
-            f"?request_id={request_id}"
-            f"&start_date={start_date}"
-            f"&end_date={end_date}"
-            f"&page=1&page_size=1"
-        )
-
-        headers = {
-            "accept": "application/json",
-            "x-litellm-api-key": key,
-        }
-
-        async with aiohttp.ClientSession() as session:
-            for attempt in range(self.valves.max_retries):
-                await self._emit_status(
-                    emitter,
-                    f"Polling LiteLLM (Attempt {attempt + 1}/{self.valves.max_retries})...",
-                    done=False,
-                )
-
-                try:
-                    async with session.get(endpoint, headers=headers) as r:
-                        if r.status == 200:
-                            data = await r.json()
-                            records = data.get("data", [])
-                            if records:
-                                return records[0]
-                except Exception as e:
-                    logger.debug(f"Polling Exception: {e}")
-
-                if attempt < self.valves.max_retries - 1:
-                    await asyncio.sleep(self.valves.retry_interval)
-
-        return None
-
-    def _format_usage_message(self, log: dict) -> str:
+    def _format_usage_message(self, log: dict, retrieved: int, total: int) -> str:
         prompt_tokens = log.get("prompt_tokens", 0)
         completion_tokens = log.get("completion_tokens", 0)
         total_tokens = log.get("total_tokens", 0)
         total_cost = log.get("spend") or 0.0
 
-        return (
+        msg = (
             f"💸 Cost: ${total_cost:.5f} | "
-            f"🎰 Tokens: ⬆️ {prompt_tokens:,} · ⬇️ {completion_tokens:,} · 🙈 {total_tokens:,} "
+            f"🎰 Tokens: ⬆️ {prompt_tokens:,} · ⬇️ {completion_tokens:,} · 🙈 {total_tokens:,}"
         )
+        if total > 1:
+            missing = total - retrieved
+            note = f"{retrieved}/{total} requests"
+            if missing:
+                note += f", {missing} failed"
+            msg += f" ({note})"
+
+        return msg
